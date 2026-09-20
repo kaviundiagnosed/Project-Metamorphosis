@@ -1,0 +1,6 @@
+{
+  "name": "Project Metamorphosis",
+  "description": "Personal athletic training system and 30-day cycle tracker designed as an offline-first iPhone PWA.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,610 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Project Metamorphosis</title>
+    <link rel="manifest" href="./manifest.json">
+    <meta name="theme-color" content="#000000">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <style>
+        body { background-color: #000; color: #fff; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; -webkit-user-select: none; user-select: none; }
+        @media print {
+            .no-print { display: none !important; }
+            .print-only { display: block !important; }
+            body { background-color: white; color: black; }
+        }
+        input, textarea, select { background-color: #1c1c1e; color: white; border: 1px solid #333; border-radius: 6px; padding: 8px; width: 100%; margin-bottom: 12px; }
+        .tab-active { color: #fff; font-weight: bold; border-bottom: 2px solid #fff; }
+        .tab-inactive { color: #666; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        // --- DEFAULT CONFIGURATION DATA ---
+        const DEFAULT_CIRCUIT = [
+            { id: 'c1', name: 'Pull-ups', instruction: 'Stop when another clean repetition cannot be completed.', prescriptionType: 'Technical failure', prescriptionValue: '' },
+            { id: 'c2', name: 'Squats', instruction: 'Perform to technical failure.', prescriptionType: 'Technical failure', prescriptionValue: '' },
+            { id: 'c3', name: 'Pull-ups', instruction: 'Perform to technical failure.', prescriptionType: 'Technical failure', prescriptionValue: '' },
+            { id: 'c4', name: 'Squats', instruction: 'Perform to technical failure.', prescriptionType: 'Technical failure', prescriptionValue: '' },
+            { id: 'c5', name: 'Pull-ups', instruction: 'Perform to technical failure.', prescriptionType: 'Technical failure', prescriptionValue: '' },
+            { id: 'c6', name: 'Squats', instruction: 'Perform to technical failure.', prescriptionType: 'Technical failure', prescriptionValue: '' },
+            { id: 'c7', name: '90-SECOND BREAK', instruction: 'Rest and recover.', prescriptionType: 'Rest period', prescriptionValue: '90s' },
+            { id: 'c8', name: 'Push-ups', instruction: 'Perform to technical failure.', prescriptionType: 'Technical failure', prescriptionValue: '' },
+            { id: 'c9', name: 'Wall sit', instruction: 'Perform to technical failure.', prescriptionType: 'Technical failure', prescriptionValue: '' },
+            { id: 'c10', name: 'Push-ups', instruction: 'Perform to technical failure.', prescriptionType: 'Technical failure', prescriptionValue: '' },
+            { id: 'c11', name: 'Wall sit', instruction: 'Perform to technical failure.', prescriptionType: 'Technical failure', prescriptionValue: '' },
+            { id: 'c12', name: 'Push-ups', instruction: 'Perform to technical failure.', prescriptionType: 'Technical failure', prescriptionValue: '' },
+            { id: 'c13', name: 'Wall sit', instruction: 'Perform to technical failure.', prescriptionType: 'Technical failure', prescriptionValue: '' }
+        ];
+
+        const DEFAULT_RECOVERY = [
+            { id: 'r1', name: 'Easy mobility', instruction: 'Focus on loosening joints.', prescriptionType: 'User-defined instruction', prescriptionValue: 'Duration determined by feel' },
+            { id: 'r2', name: 'Easy jump rope', instruction: 'Light, continuous bouncing.', prescriptionType: 'User-defined instruction', prescriptionValue: 'Determined by feel' },
+            { id: 'r3', name: 'Easy walking / very easy jogging', instruction: 'Conversational pace.', prescriptionType: 'User-defined instruction', prescriptionValue: 'Determined by feel' },
+            { id: 'r4', name: 'Easy mobility / cooldown', instruction: 'Static stretching and relaxing.', prescriptionType: 'User-defined instruction', prescriptionValue: 'Determined by feel' }
+        ];
+
+        const pwrStep = [
+            { id: 'p1', name: 'Explosive Squat', instruction: 'Controlled squat, drive upward explosively. Jump vertically. Prioritize height.', prescriptionType: 'Rounds', prescriptionValue: 'Quality reps' },
+            { id: 'p2', name: 'Broad Jump', instruction: 'Load hips, jump forward explosively. Land on both feet and stabilize.', prescriptionType: 'Rounds', prescriptionValue: 'Quality reps' },
+            { id: 'p3', name: 'Lateral Bound', instruction: 'Push explosively from one leg laterally to the other. Land and stabilize.', prescriptionType: 'Rounds', prescriptionValue: 'Quality reps' },
+            { id: 'p4', name: 'Short Acceleration Sprint', instruction: 'Controlled start, accelerate hard over short distance, decelerate safely.', prescriptionType: 'Rounds', prescriptionValue: 'Quality reps' }
+        ];
+        const DEFAULT_POWER = [
+            ...pwrStep.map(e => ({...e, id: e.id+'_1'})),
+            ...pwrStep.map(e => ({...e, id: e.id+'_2'})),
+            ...pwrStep.map(e => ({...e, id: e.id+'_3'}))
+        ];
+
+        const WORKOUT_PATTERN = ['CIRCUIT', 'RECOVERY + CARDIO', 'POWER', 'RECOVERY + CARDIO'];
+
+        const generateDefaultCycle = (phase = 1) => ({
+            phase: phase,
+            completedDays: [],
+            circuit: [...DEFAULT_CIRCUIT],
+            recoveryCardio: [...DEFAULT_RECOVERY],
+            power: [...DEFAULT_POWER],
+            testResults: null
+        });
+
+        const INITIAL_STATE = {
+            currentCycle: 1,
+            currentDay: 1,
+            cycles: {
+                1: generateDefaultCycle(1)
+            }
+        };
+
+        // --- MAIN APP COMPONENT ---
+        function App() {
+            const [state, setState] = useState(() => {
+                const saved = localStorage.getItem('metamorphosis_data');
+                return saved ? JSON.parse(saved) : INITIAL_STATE;
+            });
+            const [currentTab, setCurrentTab] = useState('TODAY'); // TODAY, CYCLE, EDIT, DATA
+
+            useEffect(() => {
+                localStorage.setItem('metamorphosis_data', JSON.stringify(state));
+            }, [state]);
+
+            const updateState = (updater) => {
+                setState(prev => {
+                    const next = typeof updater === 'function' ? updater(prev) : updater;
+                    return { ...prev, ...next };
+                });
+            };
+
+            const completeWorkout = () => {
+                updateState(prev => {
+                    const cycleData = prev.cycles[prev.currentCycle];
+                    const newCompleted = [...cycleData.completedDays, prev.currentDay];
+                    return {
+                        ...prev,
+                        currentDay: prev.currentDay + 1,
+                        cycles: {
+                            ...prev.cycles,
+                            [prev.currentCycle]: { ...cycleData, completedDays: newCompleted }
+                        }
+                    };
+                });
+            };
+
+            const completeTest = (results) => {
+                updateState(prev => {
+                    const nextCycleNum = prev.currentCycle + 1;
+                    const newCycles = { ...prev.cycles };
+                    
+                    // Save test results
+                    newCycles[prev.currentCycle] = { 
+                        ...newCycles[prev.currentCycle], 
+                        testResults: results 
+                    };
+                    
+                    // Initialize next cycle if it hasn't been pre-edited
+                    if (!newCycles[nextCycleNum]) {
+                        newCycles[nextCycleNum] = JSON.parse(JSON.stringify(newCycles[prev.currentCycle]));
+                        newCycles[nextCycleNum].completedDays = [];
+                        newCycles[nextCycleNum].testResults = null;
+                        newCycles[nextCycleNum].phase = newCycles[prev.currentCycle].phase;
+                    } else {
+                        // Just clear completed days if it was prepared in advance
+                        newCycles[nextCycleNum].completedDays = [];
+                    }
+
+                    return { currentCycle: nextCycleNum, currentDay: 1, cycles: newCycles };
+                });
+            };
+
+            return (
+                <div className="flex flex-col h-screen max-w-lg mx-auto bg-black border-x border-zinc-900 pb-env(safe-area-inset-bottom)">
+                    {/* Header */}
+                    <div className="no-print p-4 pt-10 bg-zinc-950 border-b border-zinc-900 flex justify-between items-center z-10">
+                        <h1 className="text-xl font-black tracking-widest text-white uppercase">METAMORPHOSIS</h1>
+                    </div>
+
+                    {/* Main Content Area */}
+                    <div className="flex-1 overflow-y-auto overflow-x-hidden relative">
+                        {currentTab === 'TODAY' && (
+                            <TodayView state={state} completeWorkout={completeWorkout} completeTest={completeTest} />
+                        )}
+                        {currentTab === 'CYCLE' && <CycleOverview state={state} />}
+                        {currentTab === 'EDIT' && <EditorView state={state} updateState={updateState} />}
+                        {currentTab === 'DATA' && <DataView state={state} setState={setState} />}
+                    </div>
+
+                    {/* Navigation Bar */}
+                    <div className="no-print flex border-t border-zinc-900 bg-zinc-950 pb-6 pt-2 px-2 z-10">
+                        {['TODAY', 'CYCLE', 'EDIT', 'DATA'].map(tab => (
+                            <button 
+                                key={tab}
+                                onClick={() => setCurrentTab(tab)}
+                                className={`flex-1 text-xs py-3 font-bold tracking-wider ${currentTab === tab ? 'tab-active' : 'tab-inactive'}`}
+                            >
+                                {tab}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+            );
+        }
+
+        // --- TODAY VIEW (EXECUTION) ---
+        function TodayView({ state, completeWorkout, completeTest }) {
+            const { currentCycle, currentDay, cycles } = state;
+            const cycle = cycles[currentCycle];
+            
+            if (currentDay > 30) {
+                return <TestView cycleNum={currentCycle} previousCycle={cycles[currentCycle - 1]} onSave={completeTest} />;
+            }
+
+            const workoutType = WORKOUT_PATTERN[(currentDay - 1) % 4];
+            let workoutList = [];
+            if (workoutType === 'CIRCUIT') workoutList = cycle.circuit;
+            if (workoutType === 'RECOVERY + CARDIO') workoutList = cycle.recoveryCardio;
+            if (workoutType === 'POWER') workoutList = cycle.power;
+
+            return <WorkoutRunner cycleNum={currentCycle} dayNum={currentDay} workoutType={workoutType} list={workoutList} onComplete={completeWorkout} />;
+        }
+
+        function WorkoutRunner({ cycleNum, dayNum, workoutType, list, onComplete }) {
+            const [stepIndex, setStepIndex] = useState(0);
+            
+            useEffect(() => { setStepIndex(0); }, [cycleNum, dayNum]);
+
+            if (!list || list.length === 0) {
+                return (
+                    <div className="p-8 text-center">
+                        <p className="text-red-500 mb-4">Workout configuration is empty.</p>
+                        <button onClick={onComplete} className="w-full bg-zinc-800 text-white p-4 font-bold rounded">SKIP DAY</button>
+                    </div>
+                );
+            }
+
+            const step = list[stepIndex];
+            const isLast = stepIndex === list.length - 1;
+
+            return (
+                <div className="flex flex-col h-full p-6 animate-fade-in">
+                    <div className="mb-8">
+                        <p className="text-zinc-500 font-bold tracking-widest text-sm mb-1">CYCLE {cycleNum} • DAY {dayNum} / 30</p>
+                        <h2 className="text-2xl font-black text-white">{workoutType}</h2>
+                    </div>
+
+                    <div className="flex-1 flex flex-col justify-center items-center text-center">
+                        <p className="text-zinc-600 font-bold mb-4">{stepIndex + 1} / {list.length}</p>
+                        <h3 className="text-4xl font-black mb-4">{step.name}</h3>
+                        
+                        {step.prescriptionValue && (
+                            <div className="bg-zinc-900 px-4 py-2 rounded mb-6">
+                                <span className="font-bold text-white text-lg">{step.prescriptionValue}</span>
+                                <span className="text-zinc-400 text-sm ml-2">({step.prescriptionType})</span>
+                            </div>
+                        )}
+                        {!step.prescriptionValue && (
+                            <div className="mb-6"><span className="text-zinc-400 text-sm">Type: {step.prescriptionType}</span></div>
+                        )}
+
+                        <p className="text-zinc-300 text-lg leading-relaxed max-w-xs">{step.instruction}</p>
+
+                        {step.userNotes && (
+                            <p className="mt-6 text-zinc-500 italic text-sm border-t border-zinc-800 pt-4">Notes: {step.userNotes}</p>
+                        )}
+                        {step.possibleNextVariation && (
+                            <p className="mt-2 text-blue-400 text-sm">Next progression idea: {step.possibleNextVariation}</p>
+                        )}
+                    </div>
+
+                    <div className="mt-8 pb-4">
+                        {!isLast ? (
+                            <button 
+                                onClick={() => setStepIndex(s => s + 1)}
+                                className="w-full bg-white text-black text-xl font-black py-5 rounded-lg active:bg-zinc-300 transition-colors"
+                            >
+                                NEXT
+                            </button>
+                        ) : (
+                            <button 
+                                onClick={onComplete}
+                                className="w-full bg-green-500 text-black text-xl font-black py-5 rounded-lg active:bg-green-600 transition-colors"
+                            >
+                                TRAINING COMPLETE
+                            </button>
+                        )}
+                    </div>
+                </div>
+            );
+        }
+
+        // --- TEST VIEW ---
+        function TestView({ cycleNum, previousCycle, onSave }) {
+            const [results, setResults] = useState({
+                pullUps: '', pushUps: '', squat: '', wallSit: '', deadHang: '', verticalJump: '', broadJump: '', endurance: '', notes: ''
+            });
+            const prevTest = previousCycle?.testResults || {};
+
+            return (
+                <div className="p-6">
+                    <h2 className="text-3xl font-black mb-2 uppercase text-green-400">CYCLE {cycleNum} COMPLETE</h2>
+                    <p className="text-zinc-400 mb-8">Record your physical benchmarks.</p>
+                    
+                    <div className="space-y-4 mb-8">
+                        {['pullUps', 'pushUps', 'squat', 'wallSit', 'deadHang', 'verticalJump', 'broadJump', 'endurance'].map(key => (
+                            <div key={key}>
+                                <label className="block text-sm font-bold text-zinc-400 uppercase mb-1">{key.replace(/([A-Z])/g, ' $1').trim()}</label>
+                                {prevTest[key] && <div className="text-xs text-zinc-500 mb-1">Previous: {prevTest[key]}</div>}
+                                <input type="text" value={results[key]} onChange={e => setResults({...results, [key]: e.target.value})} placeholder="Result..." />
+                            </div>
+                        ))}
+                        <div>
+                            <label className="block text-sm font-bold text-zinc-400 uppercase mb-1">Notes</label>
+                            <textarea rows="3" value={results.notes} onChange={e => setResults({...results, notes: e.target.value})}></textarea>
+                        </div>
+                    </div>
+
+                    <button onClick={() => onSave(results)} className="w-full bg-green-500 text-black font-black py-4 rounded-lg mb-8">
+                        SAVE & START NEXT CYCLE
+                    </button>
+                </div>
+            );
+        }
+
+        // --- CYCLE OVERVIEW (Printable) ---
+        function CycleOverview({ state }) {
+            const { currentCycle, cycles } = state;
+            const [viewCycle, setViewCycle] = useState(currentCycle);
+            const cycleData = cycles[viewCycle];
+            
+            if (!cycleData) return null;
+
+            return (
+                <div className="p-4">
+                    <div className="no-print flex justify-between items-center mb-6">
+                        <h2 className="text-2xl font-black">OVERVIEW</h2>
+                        <select className="w-32 m-0 bg-black text-white" value={viewCycle} onChange={e => setViewCycle(Number(e.target.value))}>
+                            {Object.keys(state.cycles).map(c => <option key={c} value={c}>Cycle {c}</option>)}
+                        </select>
+                    </div>
+
+                    <div className="print-only hidden mb-4">
+                        <h1 className="text-3xl font-black border-b-2 border-black pb-2">PROJECT METAMORPHOSIS - CYCLE {viewCycle}</h1>
+                        <p className="text-gray-600 mt-2">Phase: {cycleData.phase}</p>
+                    </div>
+
+                    <div className="no-print flex justify-between items-center bg-zinc-900 p-4 rounded-lg mb-6">
+                        <span className="font-bold text-zinc-400 uppercase">Phase {cycleData.phase}</span>
+                        <button onClick={() => window.print()} className="bg-zinc-800 px-4 py-2 rounded text-sm font-bold">PRINT TRACKER</button>
+                    </div>
+
+                    <div className="bg-zinc-950 border border-zinc-800 rounded overflow-hidden">
+                        <table className="w-full text-left text-sm">
+                            <thead className="bg-zinc-900 text-zinc-400">
+                                <tr>
+                                    <th className="p-3 w-16">Day</th>
+                                    <th className="p-3">Workout</th>
+                                    <th className="p-3 w-20 text-center">Done</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {Array.from({length: 30}).map((_, i) => {
+                                    const day = i + 1;
+                                    const workoutType = WORKOUT_PATTERN[(day - 1) % 4];
+                                    const isDone = cycleData.completedDays.includes(day);
+                                    return (
+                                        <tr key={day} className="border-t border-zinc-800">
+                                            <td className="p-3 font-bold">{day}</td>
+                                            <td className="p-3">{workoutType}</td>
+                                            <td className="p-3 text-center text-xl font-bold">
+                                                {isDone ? <span className="text-green-500">✓</span> : <span className="text-zinc-700">☐</span>}
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            );
+        }
+
+        // --- EDITOR VIEW ---
+        function EditorView({ state, updateState }) {
+            const { currentCycle } = state;
+            const [editCycle, setEditCycle] = useState(currentCycle);
+            const [category, setCategory] = useState('circuit'); // circuit, recoveryCardio, power
+            const [editingIndex, setEditingIndex] = useState(null);
+
+            const ensureCycleExists = (cNum) => {
+                if (!state.cycles[cNum]) {
+                    const confirm = window.confirm(`Cycle ${cNum} doesn't exist yet. Initialize it using Cycle ${cNum-1}'s configuration?`);
+                    if (confirm) {
+                        updateState(prev => {
+                            const clone = JSON.parse(JSON.stringify(prev.cycles[cNum-1] || generateDefaultCycle(1)));
+                            clone.completedDays = [];
+                            clone.testResults = null;
+                            return { cycles: { ...prev.cycles, [cNum]: clone } };
+                        });
+                    } else {
+                        setEditCycle(currentCycle);
+                    }
+                }
+            };
+
+            const cycleData = state.cycles[editCycle];
+            if (!cycleData) return null;
+            const list = cycleData[category];
+
+            const handleUpdateList = (newList) => {
+                updateState(prev => ({
+                    cycles: {
+                        ...prev.cycles,
+                        [editCycle]: {
+                            ...prev.cycles[editCycle],
+                            [category]: newList
+                        }
+                    }
+                }));
+            };
+
+            const moveItem = (index, dir) => {
+                if (index + dir < 0 || index + dir >= list.length) return;
+                const arr = [...list];
+                const temp = arr[index];
+                arr[index] = arr[index + dir];
+                arr[index + dir] = temp;
+                handleUpdateList(arr);
+            };
+
+            const removeItem = (index) => {
+                if(window.confirm("Remove this exercise slot?")) {
+                    const arr = [...list];
+                    arr.splice(index, 1);
+                    handleUpdateList(arr);
+                }
+            };
+
+            const duplicateItem = (index) => {
+                const arr = [...list];
+                const newItem = JSON.parse(JSON.stringify(arr[index]));
+                newItem.id = Date.now().toString();
+                arr.splice(index + 1, 0, newItem);
+                handleUpdateList(arr);
+            };
+
+            const addItem = () => {
+                const arr = [...list];
+                arr.push({
+                    id: Date.now().toString(),
+                    name: 'New Exercise',
+                    instruction: '',
+                    prescriptionType: 'Technical failure',
+                    prescriptionValue: ''
+                });
+                handleUpdateList(arr);
+                setEditingIndex(arr.length - 1);
+            };
+
+            const saveExerciseEdit = (updatedItem) => {
+                const arr = [...list];
+                arr[editingIndex] = updatedItem;
+                handleUpdateList(arr);
+                setEditingIndex(null);
+            };
+
+            return (
+                <div className="p-4 pb-20">
+                    <div className="mb-6 bg-zinc-900 p-4 rounded-lg">
+                        <label className="block text-zinc-400 text-xs font-bold mb-2 uppercase">Target Cycle</label>
+                        <select value={editCycle} onChange={e => {
+                            const val = Number(e.target.value);
+                            setEditCycle(val);
+                            ensureCycleExists(val);
+                        }}>
+                            {Array.from({length: Math.max(currentCycle + 5, Object.keys(state.cycles).length)}).map((_, i) => (
+                                <option key={i+1} value={i+1}>Cycle {i+1} {i+1 === currentCycle ? '(Current)' : ''}</option>
+                            ))}
+                        </select>
+
+                        <label className="block text-zinc-400 text-xs font-bold mb-2 uppercase mt-4">Workout Category</label>
+                        <div className="flex border border-zinc-700 rounded overflow-hidden">
+                            {[
+                                {k: 'circuit', l: 'CIRCUIT'}, 
+                                {k: 'recoveryCardio', l: 'REC+CARDIO'}, 
+                                {k: 'power', l: 'POWER'}
+                            ].map(cat => (
+                                <button key={cat.k} onClick={() => { setCategory(cat.k); setEditingIndex(null); }}
+                                    className={`flex-1 p-2 text-xs font-bold ${category === cat.k ? 'bg-white text-black' : 'bg-black text-zinc-400'}`}>
+                                    {cat.l}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    {editingIndex !== null ? (
+                        <ExerciseEditor item={list[editingIndex]} onSave={saveExerciseEdit} onCancel={() => setEditingIndex(null)} />
+                    ) : (
+                        <div>
+                            {list.map((item, index) => (
+                                <div key={item.id} className="bg-zinc-950 border border-zinc-800 p-4 rounded-lg mb-3 flex flex-col">
+                                    <div className="flex justify-between items-start mb-2">
+                                        <div>
+                                            <span className="text-zinc-500 font-bold text-xs mr-2">{index + 1}.</span>
+                                            <span className="font-bold text-lg text-white">{item.name}</span>
+                                        </div>
+                                        <div className="flex space-x-2">
+                                            <button onClick={() => moveItem(index, -1)} className="text-zinc-500 p-1">▲</button>
+                                            <button onClick={() => moveItem(index, 1)} className="text-zinc-500 p-1">▼</button>
+                                        </div>
+                                    </div>
+                                    <div className="text-sm text-zinc-400 mb-4">{item.prescriptionType} {item.prescriptionValue ? `- ${item.prescriptionValue}` : ''}</div>
+                                    
+                                    <div className="flex space-x-2 border-t border-zinc-900 pt-3">
+                                        <button onClick={() => setEditingIndex(index)} className="flex-1 bg-zinc-800 text-white text-xs font-bold py-2 rounded">EDIT</button>
+                                        <button onClick={() => duplicateItem(index)} className="flex-1 bg-zinc-800 text-white text-xs font-bold py-2 rounded">DUPLICATE</button>
+                                        <button onClick={() => removeItem(index)} className="flex-1 bg-red-900 text-white text-xs font-bold py-2 rounded">REMOVE</button>
+                                    </div>
+                                </div>
+                            ))}
+                            <button onClick={addItem} className="w-full border-2 border-dashed border-zinc-700 text-zinc-400 font-bold py-4 rounded-lg hover:border-white hover:text-white transition-colors">
+                                + ADD EXERCISE SLOT
+                            </button>
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        function ExerciseEditor({ item, onSave, onCancel }) {
+            const [form, setForm] = useState(item);
+            
+            return (
+                <div className="bg-zinc-900 p-4 rounded-lg">
+                    <h3 className="font-bold mb-4 uppercase text-zinc-400 border-b border-zinc-700 pb-2">Edit Exercise</h3>
+                    
+                    <label className="block text-xs font-bold mb-1">Movement Name</label>
+                    <input type="text" value={form.name} onChange={e => setForm({...form, name: e.target.value})} />
+
+                    <label className="block text-xs font-bold mb-1 mt-2">Prescription Type</label>
+                    <select value={form.prescriptionType} onChange={e => setForm({...form, prescriptionType: e.target.value})}>
+                        {['Technical failure', 'Timed', 'Repetitions', 'Distance', 'Duration', 'Sets', 'Rounds', 'Rest period', 'User-defined instruction'].map(o => (
+                            <option key={o} value={o}>{o}</option>
+                        ))}
+                    </select>
+
+                    <label className="block text-xs font-bold mb-1 mt-2">Value / Target (e.g., 5 reps, 90s, 5 mins)</label>
+                    <input type="text" value={form.prescriptionValue} onChange={e => setForm({...form, prescriptionValue: e.target.value})} placeholder="Optional value..." />
+
+                    <label className="block text-xs font-bold mb-1 mt-2">Instructions</label>
+                    <textarea rows="3" value={form.instruction} onChange={e => setForm({...form, instruction: e.target.value})}></textarea>
+
+                    <label className="block text-xs font-bold mb-1 mt-2 text-blue-400">Possible Future Upgrade (Idea)</label>
+                    <input type="text" value={form.possibleNextVariation || ''} onChange={e => setForm({...form, possibleNextVariation: e.target.value})} placeholder="e.g., Weighted pull-ups" />
+
+                    <label className="block text-xs font-bold mb-1 mt-2 text-zinc-400">User Notes</label>
+                    <input type="text" value={form.userNotes || ''} onChange={e => setForm({...form, userNotes: e.target.value})} placeholder="Private notes about form, weight used, etc." />
+
+                    <div className="flex space-x-4 mt-6">
+                        <button onClick={onCancel} className="flex-1 bg-zinc-800 text-white font-bold py-3 rounded">CANCEL</button>
+                        <button onClick={() => onSave(form)} className="flex-1 bg-white text-black font-bold py-3 rounded">SAVE CHANGES</button>
+                    </div>
+                </div>
+            );
+        }
+
+        // --- DATA VIEW (Export/Import) ---
+        function DataView({ state, setState }) {
+            const handleExport = () => {
+                const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(state, null, 2));
+                const dlAnchorElem = document.createElement('a');
+                dlAnchorElem.setAttribute("href", dataStr);
+                dlAnchorElem.setAttribute("download", `metamorphosis_backup_${new Date().toISOString().split('T')[0]}.json`);
+                dlAnchorElem.click();
+            };
+
+            const handleImport = (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    try {
+                        const importedState = JSON.parse(event.target.result);
+                        if (importedState && importedState.cycles && window.confirm("WARNING: This will overwrite all current progress and configurations. Proceed?")) {
+                            setState(importedState);
+                            alert("Data imported successfully!");
+                        }
+                    } catch (err) {
+                        alert("Invalid backup file.");
+                    }
+                };
+                reader.readAsText(file);
+            };
+
+            return (
+                <div className="p-6 h-full flex flex-col justify-center">
+                    <h2 className="text-2xl font-black mb-8 text-center uppercase tracking-widest text-zinc-500">Data Management</h2>
+                    
+                    <div className="bg-zinc-900 p-6 rounded-lg mb-6">
+                        <h3 className="font-bold text-white mb-2">Export Backup</h3>
+                        <p className="text-sm text-zinc-400 mb-6">Download your complete program history, configurations, notes, and test results to a JSON file.</p>
+                        <button onClick={handleExport} className="w-full bg-blue-600 text-white font-black py-4 rounded-lg active:bg-blue-700">
+                            DOWNLOAD BACKUP
+                        </button>
+                    </div>
+
+                    <div className="bg-zinc-900 p-6 rounded-lg">
+                        <h3 className="font-bold text-white mb-2">Import Backup</h3>
+                        <p className="text-sm text-zinc-400 mb-6">Restore data from a previous JSON backup file. This will overwrite current data.</p>
+                        <input type="file" id="file-upload" accept=".json" onChange={handleImport} className="hidden" />
+                        <label htmlFor="file-upload" className="block w-full bg-red-900 text-white text-center font-black py-4 rounded-lg active:bg-red-800 cursor-pointer">
+                            RESTORE DATA
+                        </label>
+                    </div>
+                </div>
+            );
+        }
+
+        // Initialize React
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+
+        // Register Service Worker for true PWA Offline Capability
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('./sw.js').then(
+                    (reg) => console.log('SW Registered', reg.scope),
+                    (err) => console.log('SW Registration Failed', err)
+                );
+            });
+        }
+    </script>
+</body>
+</html>
